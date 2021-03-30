@@ -1,8 +1,12 @@
 package abd
 
+import (
+	"context"
+)
+
 type Broadcast interface {
-	Write(value Value, t SequenceNumber) error
-	Read(r SequenceNumber) (ReadResults, error)
+	Write(ctx context.Context, value Value, t SequenceNumber) error
+	Read(ctx context.Context, r SequenceNumber) (ReadResults, error)
 }
 
 type ReadResult struct {
