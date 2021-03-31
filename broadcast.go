@@ -1,29 +1,51 @@
 package abd
 
-import (
-	"context"
-)
+import "context"
 
-type Broadcast interface {
-	Write(ctx context.Context, value Value, t SequenceNumber) error
-	Read(ctx context.Context, r SequenceNumber) (ReadResults, error)
+// broadcast is used for the communication of the ABD processes
+type broadcast interface {
+	// store - command to store value in cluster;
+	// returns after response of the majority of processes
+	store(ctx context.Context, value Value, t SequenceNumber) error
+	// load - command to obtain value from cluster;
+	// returns after response of the majority of processes
+	load(ctx context.Context, r SequenceNumber) (ReadResults, error)
+	// postponed initialization
+	setLocalProcess(ownProcessID ProcessID, process Process)
 }
 
-type ReadResult struct {
-	Timestamp SequenceNumber
-	Value     Value
+// simple implementation of broadcast, when all of the ABD processes
+// are in the address space of a single OS process; no networking is involved
+type localhostBroadcast struct {
+	processes map[ProcessID]Process
 }
 
-type ReadResults []ReadResult
+func (l localhostBroadcast) store(ctx context.Context, value Value, t SequenceNumber) error {
+	panic("implement me")
+}
 
-func (rrs ReadResults) HighestTimestamp() ReadResult {
-	var target ReadResult
+func (l localhostBroadcast) load(ctx context.Context, r SequenceNumber) (ReadResults, error) {
+	resultChan := make(chan *ReadResult, len(l.processes))
 
-	for _, rr := range rrs {
-		if rr.Timestamp > target.Timestamp {
-			target = rr
-		}
+	for _, process := range l.processes {
+		go func(process Process) {
+			resultChan <- process.receiveLoad(ctx)
+		}(process)
 	}
 
-	return target
+	results := make(ReadResults, 0, len(l.processes))
+	for result := range resultChan {
+		results = append(results, result)
+	}
+
+	return results
+}
+
+func (l *localhostBroadcast) setLocalProcess(ownProcessID ProcessID, process Process) {
+	_, exists := l.processes[ownProcessID]
+	if exists {
+		panic("implementation error: process already registered")
+	}
+
+	l.processes[ownProcessID] = process
 }

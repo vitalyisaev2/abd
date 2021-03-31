@@ -9,17 +9,20 @@ import (
 
 // Process - the ABD algorithm participant
 type Process interface {
-	// Write - client request to write message
+	// Write - client request to handleWrite message
 	Write(ctx context.Context, val Value) error
-	// Read - client request to read message
+	// Read - client request to handleRead message
 	Read(ctx context.Context) (Value, error)
-	// ReceiveStore - other model request request to store value
-	ReceiveStore(ctx context.Context, val Value) error
-	// ReceiveLoad - other model deliver request to load value
-	ReceiveLoad(ctx context.Context) (SequenceNumber, Value, error)
+	// receiveStore - other process' request to store value
+	receiveStore(ctx context.Context, val Value) error
+	// receiveLoad - other process' request to load value
+	receiveLoad(ctx context.Context) *ReadResult
 	// Quit terminates algorithm
 	Quit()
 }
+
+// ProcessID - unique identifier of the process
+type ProcessID int32
 
 var _ Process = (*processImpl)(nil)
 
@@ -28,7 +31,7 @@ type processImpl struct {
 	localTimestamp SequenceNumber // largest known localTimestamp
 	t              SequenceNumber // sequence number of the writer
 	r              SequenceNumber // sequence number of the reader
-	broadcast      Broadcast
+	broadcast      broadcast
 	requestChan    chan interface{} // request channel, also used for synchronization
 	exitChan       chan struct{}    // termination channel
 	wg             sync.WaitGroup
@@ -59,13 +62,7 @@ type receiveStoreRequest struct {
 
 type receiveLoadRequest struct {
 	ctx          context.Context
-	responseChan chan *receiveLoadResponse
-}
-
-type receiveLoadResponse struct {
-	timestamp SequenceNumber
-	val       Value
-	err       error
+	responseChan chan *ReadResult
 }
 
 func (p *processImpl) Write(ctx context.Context, val Value) error {
@@ -109,7 +106,7 @@ func (p *processImpl) Read(ctx context.Context) (Value, error) {
 	}
 }
 
-func (p *processImpl) ReceiveStore(ctx context.Context, val Value) error {
+func (p *processImpl) receiveStore(ctx context.Context, val Value) error {
 	request := &receiveStoreRequest{
 		ctx:          ctx,
 		responseChan: make(chan error, 1),
@@ -129,23 +126,23 @@ func (p *processImpl) ReceiveStore(ctx context.Context, val Value) error {
 	}
 }
 
-func (p *processImpl) ReceiveLoad(ctx context.Context) (SequenceNumber, Value, error) {
+func (p *processImpl) receiveLoad(ctx context.Context) *ReadResult {
 	request := &receiveLoadRequest{
 		ctx:          ctx,
-		responseChan: make(chan *receiveLoadResponse, 1),
+		responseChan: make(chan *ReadResult, 1),
 	}
 
 	select {
 	case p.requestChan <- request:
 	case <-p.exitChan:
-		return 0, 0, ErrProcessIsTerminating
+		return &ReadResult{Err: ErrProcessIsTerminating}
 	}
 
 	select {
 	case resp := <-request.responseChan:
-		return resp.timestamp, resp.val, resp.err
+		return resp
 	case <-p.exitChan:
-		return 0, 0, ErrProcessIsTerminating
+		return &ReadResult{Err: ErrProcessIsTerminating}
 	}
 }
 
@@ -170,35 +167,35 @@ func (p *processImpl) loop() {
 func (p *processImpl) handleRequest(request interface{}) {
 	switch t := request.(type) {
 	case *writeRequest:
-		t.responseChan <- p.write(t.ctx, t.val)
+		t.responseChan <- p.handleWrite(t.ctx, t.val)
 	case *readRequest:
-		val, err := p.read(t.ctx)
+		val, err := p.handleRead(t.ctx)
 		t.responseChan <- &readResponse{val: val, err: err}
 	case *receiveStoreRequest:
-		t.responseChan <- p.receiveStore(t.val, t.timestamp)
+		t.responseChan <- p.handleReceiveStore(t.val, t.timestamp)
 	case *receiveLoadRequest:
-		t.responseChan <- p.receiveLoad()
+		t.responseChan <- p.handleReceiveLoad()
 	default:
 		panic("unexpected message type")
 	}
 }
 
-func (p *processImpl) write(ctx context.Context, val Value) error {
+func (p *processImpl) handleWrite(ctx context.Context, val Value) error {
 	p.t++
 
-	if err := p.broadcast.Write(ctx, val, p.t); err != nil {
-		return errors.Wrapf(err, "broadcast write value %v", val)
+	if err := p.broadcast.store(ctx, val, p.t); err != nil {
+		return errors.Wrapf(err, "broadcast handleWritehandleWrite value %v", val)
 	}
 
 	return nil
 }
 
-func (p *processImpl) read(ctx context.Context) (Value, error) {
+func (p *processImpl) handleRead(ctx context.Context) (Value, error) {
 	p.r++
 
-	results, err := p.broadcast.Read(ctx, p.r)
+	results, err := p.broadcast.load(ctx, p.r)
 	if err != nil {
-		return 0, errors.Wrapf(err, "broadcast read term=%v", p.r)
+		return 0, errors.Wrapf(err, "broadcast handleRead term=%v", p.r)
 	}
 
 	v := results.HighestTimestamp()
@@ -210,7 +207,7 @@ func (p *processImpl) read(ctx context.Context) (Value, error) {
 	return p.localValue, nil
 }
 
-func (p *processImpl) receiveStore(val Value, timestamp SequenceNumber) error {
+func (p *processImpl) handleReceiveStore(val Value, timestamp SequenceNumber) error {
 	if timestamp > p.localTimestamp {
 		p.localValue = val
 		p.localTimestamp = timestamp
@@ -219,11 +216,11 @@ func (p *processImpl) receiveStore(val Value, timestamp SequenceNumber) error {
 	return nil
 }
 
-func (p *processImpl) receiveLoad() *receiveLoadResponse {
-	return &receiveLoadResponse{timestamp: p.localTimestamp, val: p.localValue}
+func (p *processImpl) handleReceiveLoad() *ReadResult {
+	return &ReadResult{Timestamp: p.localTimestamp, Value: p.localValue}
 }
 
-func NewProcess(broadcast Broadcast) Process {
+func NewProcess(broadcast broadcast) Process {
 	p := &processImpl{
 		localValue:     0,
 		localTimestamp: 0,
