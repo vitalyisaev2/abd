@@ -14,7 +14,7 @@ type Process interface {
 	// Read - client request to handleRead message
 	Read(ctx context.Context) (Value, error)
 	// receiveStore - other process' request to store value
-	receiveStore(ctx context.Context, val Value) error
+	receiveStore(ctx context.Context, val Value, timestamp SequenceNumber) error
 	// receiveLoad - other process' request to load value
 	receiveLoad(ctx context.Context) *ReadResult
 	// Quit terminates algorithm
@@ -27,11 +27,11 @@ type ProcessID int32
 var _ Process = (*processImpl)(nil)
 
 type processImpl struct {
-	localValue     Value          // locally stored copy TODO: change to template when Go implements generics
-	localTimestamp SequenceNumber // largest known localTimestamp
-	t              SequenceNumber // sequence number of the writer
-	r              SequenceNumber // sequence number of the reader
-	broadcast      broadcast
+	localValue     Value            // locally stored copy TODO: change to template when Go implements generics
+	localTimestamp SequenceNumber   // largest known timestamp
+	t              SequenceNumber   // sequence number of the writer
+	r              SequenceNumber   // sequence number of the reader
+	broadcast      broadcast        // abstracts from the way of communication with other processes
 	requestChan    chan interface{} // request channel, also used for synchronization
 	exitChan       chan struct{}    // termination channel
 	wg             sync.WaitGroup
@@ -106,9 +106,11 @@ func (p *processImpl) Read(ctx context.Context) (Value, error) {
 	}
 }
 
-func (p *processImpl) receiveStore(ctx context.Context, val Value) error {
+func (p *processImpl) receiveStore(ctx context.Context, val Value, timestamp SequenceNumber) error {
 	request := &receiveStoreRequest{
 		ctx:          ctx,
+		val:          val,
+		timestamp:    timestamp,
 		responseChan: make(chan error, 1),
 	}
 
@@ -184,7 +186,7 @@ func (p *processImpl) handleWrite(ctx context.Context, val Value) error {
 	p.t++
 
 	if err := p.broadcast.store(ctx, val, p.t); err != nil {
-		return errors.Wrapf(err, "broadcast handleWritehandleWrite value %v", val)
+		return errors.Wrapf(err, "broadcast store value=%v term=%v", val, p.t)
 	}
 
 	return nil
@@ -193,15 +195,16 @@ func (p *processImpl) handleWrite(ctx context.Context, val Value) error {
 func (p *processImpl) handleRead(ctx context.Context) (Value, error) {
 	p.r++
 
-	results, err := p.broadcast.load(ctx, p.r)
+	results := p.broadcast.load(ctx, p.r)
+
+	latestValue, latestTimestamp, err := results.LatestTimestamp()
 	if err != nil {
-		return 0, errors.Wrapf(err, "broadcast handleRead term=%v", p.r)
+		return 0, errors.Wrapf(err, "broadcast load term=%v", p.r)
 	}
 
-	v := results.HighestTimestamp()
-	if v.Timestamp > p.localTimestamp {
-		p.localValue = v.Value
-		p.localTimestamp = v.Timestamp
+	if latestTimestamp > p.localTimestamp {
+		p.localValue = latestValue
+		p.localTimestamp = latestTimestamp
 	}
 
 	return p.localValue, nil
