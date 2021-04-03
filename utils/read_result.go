@@ -1,4 +1,4 @@
-package abd
+package utils
 
 type ReadResult struct {
 	Value     Value
@@ -16,7 +16,7 @@ func (rr *ReadResult) clone() *ReadResult {
 
 type ReadResults []*ReadResult
 
-func (rrs ReadResults) succeeded() int {
+func (rrs ReadResults) Succeeded() int {
 	count := 0
 
 	for _, res := range rrs {
@@ -44,7 +44,7 @@ func (rrs ReadResults) LatestTimestamp() (Value, SequenceNumber, error) {
 	}
 
 	// if there are too many errors, return error
-	if errList.Len() > len(rrs)-quorum(len(rrs)) {
+	if errList.Len() > len(rrs)-Quorum(len(rrs)) {
 		return 0, 0, errList.Err()
 	}
 
