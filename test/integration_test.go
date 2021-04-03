@@ -2,6 +2,8 @@ package test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -61,5 +63,66 @@ func TestABD(t *testing.T) {
 		value, err = readProcess.Read(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, utils.Value(-123), value)
+	})
+
+	t.Run("concurrent writes and reads to the same nodes", func(t *testing.T) {
+		// cluster from 3 processes
+		cluster, err := newLocalhostCluster(3)
+		require.NoError(t, err)
+
+		defer cluster.quit()
+
+		// pick different nodes for reading and for writing
+		processIDs := cluster.getProcessIDs()
+
+		var (
+			wg            sync.WaitGroup
+			writtenValues []utils.Value
+			readValues    []utils.Value
+		)
+
+		const iterations = 100
+
+		wg.Add(2)
+
+		// one thread is for the reading
+		go func() {
+			defer wg.Done()
+
+			readProcess, err := cluster.getProcessByID(processIDs[0])
+			require.NoError(t, err)
+
+			ctx := context.Background()
+
+			for i := 0; i < iterations; i++ {
+				value, err := readProcess.Read(ctx)
+				require.NoError(t, err)
+				readValues = append(readValues, value)
+			}
+		}()
+
+		// another is for the writing
+		go func() {
+			defer wg.Done()
+
+			writerProcess, err := cluster.getProcessByID(processIDs[len(processIDs)-1])
+			require.NoError(t, err)
+
+			ctx := context.Background()
+
+			for i := 0; i < iterations; i++ {
+				value := utils.Value(i)
+				err := writerProcess.Write(ctx, value)
+				require.NoError(t, err)
+
+				writtenValues = append(writtenValues, value)
+			}
+		}()
+
+		wg.Wait()
+
+		// TODO: linearizability checks
+		fmt.Println(writtenValues)
+		fmt.Println(readValues)
 	})
 }
