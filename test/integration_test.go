@@ -85,10 +85,11 @@ func TestABD(t *testing.T) {
 
 		wg.Add(2)
 
-		// one thread is for the reading
+		// one thread is for reading
 		go func() {
 			defer wg.Done()
 
+			// preserve node for reading
 			readProcess, err := cluster.getProcessByID(processIDs[0])
 			require.NoError(t, err)
 
@@ -101,10 +102,11 @@ func TestABD(t *testing.T) {
 			}
 		}()
 
-		// another is for the writing
+		// another is for writing
 		go func() {
 			defer wg.Done()
 
+			// preserve node for writing
 			writerProcess, err := cluster.getProcessByID(processIDs[len(processIDs)-1])
 			require.NoError(t, err)
 
@@ -113,6 +115,60 @@ func TestABD(t *testing.T) {
 			for i := 0; i < iterations; i++ {
 				value := utils.Value(i)
 				err := writerProcess.Write(ctx, value)
+				require.NoError(t, err)
+
+				writtenValues = append(writtenValues, value)
+			}
+		}()
+
+		wg.Wait()
+
+		// TODO: linearizability checks
+		fmt.Println(writtenValues)
+		fmt.Println(readValues)
+	})
+
+	t.Run("concurrent writes and reads to different nodes", func(t *testing.T) {
+		// cluster from 3 processes
+		cluster, err := newLocalhostCluster(3)
+		require.NoError(t, err)
+
+		defer cluster.quit()
+
+		var (
+			wg            sync.WaitGroup
+			writtenValues []utils.Value
+			readValues    []utils.Value
+		)
+
+		const iterations = 100
+
+		wg.Add(2)
+
+		// one thread is for reading
+		go func() {
+			defer wg.Done()
+
+			ctx := context.Background()
+
+			for i := 0; i < iterations; i++ {
+				// get random node every time
+				value, err := cluster.getRandomProcess().Read(ctx)
+				require.NoError(t, err)
+				readValues = append(readValues, value)
+			}
+		}()
+
+		// another is for writing
+		go func() {
+			defer wg.Done()
+
+			ctx := context.Background()
+
+			for i := 0; i < iterations; i++ {
+				// get random node every time
+				value := utils.Value(i)
+				err := cluster.getRandomProcess().Write(ctx, value)
 				require.NoError(t, err)
 
 				writtenValues = append(writtenValues, value)
