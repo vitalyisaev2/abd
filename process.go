@@ -24,13 +24,10 @@ type Process interface {
 	Register  // every process must server as a register for the external clients
 	node.Node // every process must serve as a cluster member
 	// ID - returns process' unique id
-	ID() ProcessID
+	ID() utils.ProcessID
 	// Quit terminates algorithm
 	Quit()
 }
-
-// ProcessID - unique identifier of the process
-type ProcessID int32
 
 var _ Process = (*processImpl)(nil)
 
@@ -41,7 +38,7 @@ type processImpl struct {
 	r              utils.SequenceNumber // sequence number of the reader
 	broadcast      broadcast.Broadcast  // abstracts from the way of communication with other processes
 	requestChan    chan interface{}     // request channel, also used for synchronization
-	id             ProcessID            // globally unique ID
+	id             utils.ProcessID      // globally unique ID
 	wg             sync.WaitGroup       // used for graceful stop
 	exitChan       chan struct{}        // termination channel
 }
@@ -227,7 +224,7 @@ func (p *processImpl) handleLoad() *utils.ReadResult {
 	return &utils.ReadResult{Timestamp: p.localTimestamp, Value: p.localValue}
 }
 
-func (p *processImpl) ID() ProcessID { return p.id }
+func (p *processImpl) ID() utils.ProcessID { return p.id }
 
 func (p *processImpl) Quit() {
 	close(p.exitChan)
@@ -250,9 +247,9 @@ func (c clientLocalNonblocking) Store(_ context.Context, val utils.Value, timest
 }
 
 func (c clientLocalNonblocking) Load(_ context.Context) *utils.ReadResult { return c.p.handleLoad() }
-func (c clientLocalNonblocking) ID() ProcessID                            { return c.p.ID() }
+func (c clientLocalNonblocking) ID() utils.ProcessID                      { return c.p.ID() }
 
-func NewProcess(id ProcessID, bc broadcast.Broadcast) (Process, error) {
+func NewProcess(id utils.ProcessID, bc broadcast.Broadcast) (Process, error) {
 	p := &processImpl{
 		localValue:     0,
 		localTimestamp: 0,

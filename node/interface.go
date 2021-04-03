@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 
-	"github.com/vitalyisaev2/abd"
 	"github.com/vitalyisaev2/abd/utils"
 )
 
@@ -18,5 +17,5 @@ type Node interface {
 // Client is a client for a (possibly remote) node
 type Client interface {
 	Node
-	ID() abd.ProcessID
+	ID() utils.ProcessID
 }

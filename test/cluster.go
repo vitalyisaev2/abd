@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+
 	"github.com/vitalyisaev2/abd"
 	"github.com/vitalyisaev2/abd/broadcast"
+	"github.com/vitalyisaev2/abd/utils"
 )
 
 func init() {
@@ -19,9 +21,9 @@ func init() {
 // used for integration tests
 type cluster interface {
 	// getProcessIDs returns list of processes' IDs
-	getProcessIDs() []abd.ProcessID
+	getProcessIDs() []utils.ProcessID
 	// getProcessByID returns the process with the given ID
-	getProcessByID(id abd.ProcessID) (abd.Process, error)
+	getProcessByID(id utils.ProcessID) (abd.Process, error)
 	// getRandomProcess returns arbitrary process
 	getRandomProcess() abd.Process
 	// quit terminates cluster
@@ -32,8 +34,8 @@ type localhostCluster struct {
 	processes []abd.Process
 }
 
-func (l localhostCluster) getProcessIDs() []abd.ProcessID {
-	result := make([]abd.ProcessID, len(l.processes))
+func (l localhostCluster) getProcessIDs() []utils.ProcessID {
+	result := make([]utils.ProcessID, 0, len(l.processes))
 	for _, p := range l.processes {
 		result = append(result, p.ID())
 	}
@@ -43,7 +45,7 @@ func (l localhostCluster) getProcessIDs() []abd.ProcessID {
 	return result
 }
 
-func (l localhostCluster) getProcessByID(id abd.ProcessID) (abd.Process, error) {
+func (l localhostCluster) getProcessByID(id utils.ProcessID) (abd.Process, error) {
 	for _, p := range l.processes {
 		if p.ID() == id {
 			return p, nil
@@ -78,7 +80,7 @@ func newLocalhostCluster(totalProcesses int) (cluster, error) {
 
 	// launch the processes
 	for i := 0; i < totalProcesses; i++ {
-		processID := abd.ProcessID(i + 1)
+		processID := utils.ProcessID(i + 1)
 
 		var err error
 		c.processes[i], err = abd.NewProcess(processID, broadcasts[i])
