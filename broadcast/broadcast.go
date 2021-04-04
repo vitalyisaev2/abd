@@ -4,12 +4,11 @@ import (
 	"context"
 
 	"github.com/pkg/errors"
-
 	"github.com/vitalyisaev2/abd/node"
 	"github.com/vitalyisaev2/abd/utils"
 )
 
-// Broadcast is used for the communication within a group of ABD clients
+// Broadcast is used for the communication within a group of ABD clients.
 type Broadcast interface {
 	// Store - command to store value in cluster;
 	// returns after response of the majority of clients
@@ -22,7 +21,7 @@ type Broadcast interface {
 }
 
 // simple implementation of Broadcast, when all of the ABD clients
-// are in the address space of a single OS process; no networking is involved
+// are in the address space of a single OS process; no networking is involved.
 type broadcastImpl struct {
 	clients []node.Client
 }
@@ -94,9 +93,11 @@ func (b *broadcastImpl) RegisterClient(newClient node.Client) error {
 	}
 
 	b.clients = append(b.clients, newClient)
+
 	return nil
 }
 
+// NewBroadcast is a constructor for a Broadcast.
 func NewBroadcast() Broadcast {
 	return &broadcastImpl{}
 }

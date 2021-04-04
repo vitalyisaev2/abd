@@ -5,13 +5,12 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-
 	"github.com/vitalyisaev2/abd/broadcast"
 	"github.com/vitalyisaev2/abd/node"
 	"github.com/vitalyisaev2/abd/utils"
 )
 
-// Register provides public interface for a register
+// Register provides public interface for a register.
 type Register interface {
 	// Write - write value
 	Write(ctx context.Context, val utils.Value) error
@@ -19,7 +18,7 @@ type Register interface {
 	Read(ctx context.Context) (utils.Value, error)
 }
 
-// Process - the ABD algorithm participant
+// Process - the ABD algorithm participant.
 type Process interface {
 	Register  // every process must server as a register for the external clients
 	node.Node // every process must serve as a cluster member
@@ -31,22 +30,23 @@ type Process interface {
 
 var _ Process = (*processImpl)(nil)
 
+// nolint: govet // FIXME: dig into alignments
 type processImpl struct {
+	broadcast      broadcast.Broadcast  // abstracts from the way of communication with other processes
 	localValue     utils.Value          // locally stored copy TODO: change to template when Go implements generics
 	localTimestamp utils.SequenceNumber // largest known timestamp
 	t              utils.SequenceNumber // sequence number of the writer
 	r              utils.SequenceNumber // sequence number of the reader
-	broadcast      broadcast.Broadcast  // abstracts from the way of communication with other processes
 	requestChan    chan interface{}     // request channel, also used for synchronization
-	id             utils.ProcessID      // globally unique ID
-	wg             sync.WaitGroup       // used for graceful stop
 	exitChan       chan struct{}        // termination channel
+	wg             sync.WaitGroup       // used for graceful stop
+	id             utils.ProcessID      // globally unique ID
 }
 
 type writeRequest struct {
 	ctx          context.Context
-	val          utils.Value
 	responseChan chan error
+	val          utils.Value
 }
 
 type readRequest struct {
@@ -55,15 +55,15 @@ type readRequest struct {
 }
 
 type readResponse struct {
-	val utils.Value
 	err error
+	val utils.Value
 }
 
 type receiveStoreRequest struct {
-	ctx          context.Context
-	val          utils.Value
-	timestamp    utils.SequenceNumber
 	responseChan chan error
+	ctx          context.Context
+	timestamp    utils.SequenceNumber
+	val          utils.Value
 }
 
 type receiveLoadRequest struct {
@@ -211,6 +211,7 @@ func (p *processImpl) handleRead(ctx context.Context) (utils.Value, error) {
 	return p.localValue, nil
 }
 
+//nolint: unparam // now the errors are not possible, but things may change in future
 func (p *processImpl) handleStore(val utils.Value, timestamp utils.SequenceNumber) error {
 	if timestamp > p.localTimestamp {
 		p.localValue = val
@@ -233,7 +234,8 @@ func (p *processImpl) Quit() {
 
 var _ node.Client = (*clientLocalNonblocking)(nil)
 
-// clientLocalNonblocking makes it possible to perform private calls to the process (important for the broadcast implementation)
+// clientLocalNonblocking makes it possible to perform private calls to the process
+// (important for the broadcast implementation).
 type clientLocalNonblocking struct {
 	p *processImpl
 }
@@ -249,6 +251,7 @@ func (c clientLocalNonblocking) Store(_ context.Context, val utils.Value, timest
 func (c clientLocalNonblocking) Load(_ context.Context) *utils.ReadResult { return c.p.handleLoad() }
 func (c clientLocalNonblocking) ID() utils.ProcessID                      { return c.p.ID() }
 
+// NewProcess is a constructor of the process of an ABD algorithm.
 func NewProcess(id utils.ProcessID, bc broadcast.Broadcast) (Process, error) {
 	p := &processImpl{
 		localValue:     0,
@@ -268,6 +271,7 @@ func NewProcess(id utils.ProcessID, bc broadcast.Broadcast) (Process, error) {
 	}
 
 	p.wg.Add(1)
+
 	go p.loop()
 
 	return p, nil

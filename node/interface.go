@@ -6,7 +6,7 @@ import (
 	"github.com/vitalyisaev2/abd/utils"
 )
 
-// Node describes private interface of a cluster member
+// Node describes private interface of a cluster member.
 type Node interface {
 	// receiveStore - other process' request to Store value
 	Store(ctx context.Context, val utils.Value, timestamp utils.SequenceNumber) error
@@ -14,7 +14,7 @@ type Node interface {
 	Load(ctx context.Context) *utils.ReadResult
 }
 
-// Client is a client for a (possibly remote) node
+// Client is a client for a (possibly remote) node.
 type Client interface {
 	Node
 	ID() utils.ProcessID

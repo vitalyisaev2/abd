@@ -1,9 +1,10 @@
 package utils
 
+// ReadResult tries to emulate algebraic data type for the result of register read operation.
 type ReadResult struct {
+	Err       error
 	Value     Value
 	Timestamp SequenceNumber
-	Err       error
 }
 
 func (rr *ReadResult) clone() *ReadResult {
@@ -14,8 +15,10 @@ func (rr *ReadResult) clone() *ReadResult {
 	}
 }
 
+// ReadResults is a collection of ReadResults :).
 type ReadResults []*ReadResult
 
+// Succeeded return the number of successful responses.
 func (rrs ReadResults) Succeeded() int {
 	count := 0
 
@@ -28,6 +31,7 @@ func (rrs ReadResults) Succeeded() int {
 	return count
 }
 
+// LatestTimestamp looks for the value with a highest timestamp.
 func (rrs ReadResults) LatestTimestamp() (Value, SequenceNumber, error) {
 	var (
 		target  = rrs[0].clone()

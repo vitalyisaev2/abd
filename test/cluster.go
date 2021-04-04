@@ -7,18 +7,13 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-
 	"github.com/vitalyisaev2/abd"
 	"github.com/vitalyisaev2/abd/broadcast"
 	"github.com/vitalyisaev2/abd/utils"
 )
 
-func init() {
-	rand.Seed(time.Now().Unix())
-}
-
 // cluster is an abstraction for the group of the ABD processes;
-// used for integration tests
+// used for integration tests.
 type cluster interface {
 	// getProcessIDs returns list of processes' IDs
 	getProcessIDs() []utils.ProcessID
@@ -56,7 +51,9 @@ func (l localhostCluster) getProcessByID(id utils.ProcessID) (abd.Process, error
 }
 
 func (l localhostCluster) getRandomProcess() abd.Process {
+	// nolint: gosec // we don't care about the RNG here
 	ix := rand.Intn(len(l.processes))
+
 	return l.processes[ix]
 }
 
@@ -66,8 +63,12 @@ func (l localhostCluster) quit() {
 	}
 }
 
-// newLocalhostCluster runs cluster of the ABD processes in the same address space (for the sake of integration testing)
+// newLocalhostCluster runs cluster of the ABD processes in the same address space
+// (for the sake of integration testing).
+// nolint:gocognit,unparam // TODO: implement cluster factory or builder
 func newLocalhostCluster(totalProcesses int) (cluster, error) {
+	rand.Seed(time.Now().Unix())
+
 	c := &localhostCluster{
 		processes: make([]abd.Process, totalProcesses),
 	}
