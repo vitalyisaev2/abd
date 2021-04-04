@@ -17,16 +17,16 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
-// cluster is an abstraction for the group of the ABD processes;
+// installation is an abstraction for the group of the ABD processes;
 // used for integration tests
-type cluster interface {
+type installation interface {
 	// getProcessIDs returns list of processes' IDs
 	getProcessIDs() []utils.ProcessID
 	// getProcessByID returns the process with the given ID
 	getProcessByID(id utils.ProcessID) (abd.Process, error)
 	// getRandomProcess returns arbitrary process
 	getRandomProcess() abd.Process
-	// quit terminates cluster
+	// quit terminates installation
 	quit()
 }
 
@@ -66,8 +66,8 @@ func (l localhostCluster) quit() {
 	}
 }
 
-// newLocalhostCluster runs cluster of the ABD processes in the same address space (for the sake of integration testing)
-func newLocalhostCluster(totalProcesses int) (cluster, error) {
+// newLocalhostCluster runs cluster of the ABD processes in the same address space (for the sake of integration tests simplicity)
+func newLocalhostCluster(totalProcesses int) (installation, error) {
 	c := &localhostCluster{
 		processes: make([]abd.Process, totalProcesses),
 	}

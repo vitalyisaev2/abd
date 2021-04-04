@@ -8,12 +8,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/vitalyisaev2/abd/test/linearizability"
 	"github.com/vitalyisaev2/abd/utils"
 )
 
 func TestABD(t *testing.T) {
 	t.Run("read write on the same process", func(t *testing.T) {
-		// cluster from 3 processes
+		// installation from 3 processes
 		cluster, err := newLocalhostCluster(3)
 		require.NoError(t, err)
 
@@ -37,7 +38,7 @@ func TestABD(t *testing.T) {
 	})
 
 	t.Run("read write on the different processes", func(t *testing.T) {
-		// cluster from 3 processes
+		// installation from 3 processes
 		cluster, err := newLocalhostCluster(3)
 		require.NoError(t, err)
 
@@ -66,7 +67,7 @@ func TestABD(t *testing.T) {
 	})
 
 	t.Run("concurrent writes and reads to the same nodes", func(t *testing.T) {
-		// cluster from 3 processes
+		// installation from 3 processes
 		cluster, err := newLocalhostCluster(3)
 		require.NoError(t, err)
 
@@ -79,6 +80,7 @@ func TestABD(t *testing.T) {
 			wg            sync.WaitGroup
 			writtenValues []utils.Value
 			readValues    []utils.Value
+			history       = &linearizability.History{}
 		)
 
 		const iterations = 100
@@ -97,6 +99,9 @@ func TestABD(t *testing.T) {
 
 			for i := 0; i < iterations; i++ {
 				value, err := readProcess.Read(ctx)
+
+				history.RegisterRead(value)
+
 				require.NoError(t, err)
 				readValues = append(readValues, value)
 			}
@@ -115,6 +120,8 @@ func TestABD(t *testing.T) {
 			for i := 0; i < iterations; i++ {
 				value := utils.Value(i)
 				err := writerProcess.Write(ctx, value)
+				history.RegisterWrite(value)
+
 				require.NoError(t, err)
 
 				writtenValues = append(writtenValues, value)
@@ -123,13 +130,11 @@ func TestABD(t *testing.T) {
 
 		wg.Wait()
 
-		// TODO: linearizability checks
-		fmt.Println(writtenValues)
-		fmt.Println(readValues)
+		history.Analyze(t)
 	})
 
 	t.Run("concurrent writes and reads to different nodes", func(t *testing.T) {
-		// cluster from 3 processes
+		// installation from 3 processes
 		cluster, err := newLocalhostCluster(3)
 		require.NoError(t, err)
 
